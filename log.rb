@@ -19,7 +19,6 @@
 
 require 'mongo'
 require 'discordrb'
-require 'bson'
 
 loggingbot = Discordrb::Bot.new token: 'MjIwODcxNzE5ODk4ODQxMDg5.Cqmmhw.TSWQKUVw5BEfMbvvsdz4Wczdu0E', application_id: 220871719898841089
 
@@ -27,6 +26,8 @@ ignored_channels = []
 
 mongo_client = Mongo::Client.new('mongodb://127.0.0.1:27017/logs')
 logs_db = mongo_client.database
+
+Mongo::Logger.logger.level = ::Logger::FATAL
 
 loggingbot.message do |event|
   break if ignored_channels.include? event.channel.name
@@ -36,9 +37,19 @@ loggingbot.message do |event|
   attachments = event.message.attachments
   attachments.map! { |attachment| [attachment.filename, attachment.url] } unless attachments.empty?
 
-  message = { user: event.author.name, content: event.content, attachments: attachments, avatar: event.author.avatar_url, time: event.timestamp, channel: event.channel.name }
+  message = { user: event.author.name, content: event.content, attachments: attachments, avatar: event.author.avatar_url, time: event.timestamp, channel: event.channel.name, message_id: event.message.id }
 
   result = channel_collection.insert_one(message)
+end
+
+loggingbot.message_edit do |event|
+  break if ignored_channels.include? event.channel.name
+
+  channel_collection = mongo_client[event.channel.name.to_sym]
+
+  edit = { content: event.content, time: event.timestamp, message_id: event.message.id, is_edit: true }
+
+  result = channel_collection.insert_one(edit)
 end
 
 loggingbot.run
